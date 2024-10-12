@@ -1,205 +1,161 @@
-import React, { useState } from 'react';
-import { Button, TextField, Grid, Typography, Box, Stepper, Step, StepLabel, FormControlLabel, Checkbox, IconButton, List, ListItem, ListItemText, ListItemSecondaryAction } from '@mui/material';
-import MenuItem from '@mui/material/MenuItem';
-import DeleteIcon from '@mui/icons-material/Delete';
+// src/components/SubmitExperimentForm.js
+
+import React, { useState, useEffect } from 'react';
+import { Box, Stepper, Step, StepLabel, Snackbar } from '@mui/material';
+import { useNavigate } from 'react-router-dom'; // For navigation
+import Step1 from './steps/Step1';
+import Step2 from './steps/Step2';
+import Step3 from './steps/Step3';
+import StepButtons from './common/StepButtons/StepButtons';
+import { submitExperiment, fetchTeachers } from '../api';
+import translations from '../translations';
+import MuiAlert from '@mui/material/Alert';
+
+// Alert component with forwardRef
+const Alert = React.forwardRef(function Alert(props, ref) {
+  return <MuiAlert elevation={6} ref={ref} variant="filled" {...props} />;
+});
 
 const SubmitExperimentForm = () => {
   const [activeStep, setActiveStep] = useState(0);
+  const [formData, setFormData] = useState({
+    title: '',
+    requestDate: '',
+    experimentDate: '',
+    teacher: '',
+    objective: '',
+    materials: [],
+    groupCount: 1,
+    notes: '',
+    safetyMeasures: { gloves: false, mask: false, labCoat: false },
+    status: 'pending',
+  });
+  const [teachers, setTeachers] = useState([]);
+  const [errorFields, setErrorFields] = useState({});
+  const [openSnackbar, setOpenSnackbar] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertSeverity, setAlertSeverity] = useState('success'); // Change alert severity based on success/failure
+  const [language, setLanguage] = useState('en');
+  const navigate = useNavigate(); // For navigation after submission
 
-  // Individual input state
-  const [title, setTitle] = useState('');
-  const [requestDate, setRequestDate] = useState('');
-  const [experimentDate, setExperimentDate] = useState('');
-  const [teacher, setTeacher] = useState('');
-  const [objective, setObjective] = useState('');
-  const [materials, setMaterials] = useState([]);
-  const [materialName, setMaterialName] = useState('');
-  const [materialQuantity, setMaterialQuantity] = useState('');
-  const [groupCount, setGroupCount] = useState(1);
-  const [notes, setNotes] = useState('');
-  const [safetyMeasures, setSafetyMeasures] = useState({ gloves: false, mask: false, labCoat: false });
+  const steps = translations[language].stepTitles;
 
-  const steps = ['Basic Information', 'Experiment Details', 'Scheduling & Safety'];
-  const teachers = ["Ahmed Kannaany", "Mohammad Said", "Other Teacher"];
+  // Fetch teachers data on component mount
+  useEffect(() => {
+    const loadTeachers = async () => {
+      try {
+        const response = await fetchTeachers();
+        setTeachers(response.data); // Set fetched teacher data
+      } catch (error) {
+        console.error('Error fetching teachers:', error);
+      }
+    };
+    loadTeachers();
+  }, []);
 
-  const handleNext = () => setActiveStep((prevActiveStep) => prevActiveStep + 1);
+  // Handle moving to the next step
+  const handleNext = () => {
+    const errors = validateFields(activeStep);
+    if (Object.keys(errors).length > 0) {
+      setErrorFields(errors);
+      setAlertMessage(translations[language].errors.required);
+      setAlertSeverity('error');
+      setOpenSnackbar(true);
+      return;
+    }
+    setErrorFields({});
+    setActiveStep((prevActiveStep) => prevActiveStep + 1); // Move to next step
+  };
+
+  // Handle moving back to the previous step
   const handleBack = () => setActiveStep((prevActiveStep) => prevActiveStep - 1);
 
-  const addMaterial = () => {
-    if (materialName && materialQuantity) {
-      setMaterials((prevMaterials) => [...prevMaterials, { name: materialName, quantity: materialQuantity }]);
-      setMaterialName('');
-      setMaterialQuantity('');
+  // Validate fields based on the current step
+  const validateFields = (step) => {
+    const errors = {};
+    switch (step) {
+      case 0:
+        if (!formData.title) errors.title = true;
+        if (!formData.requestDate) errors.requestDate = true;
+        if (!formData.experimentDate) errors.experimentDate = true;
+        if (!formData.teacher) errors.teacher = true;
+        break;
+      case 1:
+        if (!formData.objective) errors.objective = true;
+        break;
+      case 2:
+        if (!formData.groupCount) errors.groupCount = true;
+        // Add additional validation for Step 3 fields if needed
+        break;
+      default:
+        break;
+    }
+    return errors;
+  };
+
+  // Handle input changes and update form data
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prevState) => ({
+      ...prevState,
+      [name]: value,
+    }));
+  };
+
+  // Handle form submission
+  const handleSubmit = async () => {
+    console.log("Submit button clicked, attempting to submit...");
+
+    const errors = validateFields(activeStep); // Validate fields before submitting
+    if (Object.keys(errors).length > 0) {
+      setErrorFields(errors);
+      setAlertMessage(translations[language].errors.required);
+      setAlertSeverity('error');
+      setOpenSnackbar(true);
+      console.log("Validation failed. Errors:", errors); // Log validation errors
+      return; // Prevent submission if there are validation errors
+    }
+
+    try {
+      console.log("Form data to be submitted:", formData); // Log form data
+      const response = await submitExperiment(formData); // Submit form data to API
+      console.log('Experiment submitted:', response.data); // Log response from API
+
+      // Show success alert
+      setAlertMessage('Experiment added successfully!');
+      setAlertSeverity('success');
+      setOpenSnackbar(true);
+
+      // Redirect to report page after showing success alert
+      setTimeout(() => {
+        navigate('/experiment-report', { state: { experiment: response.data } }); // Redirect with experiment data
+      }, 2000); // Redirect after 2 seconds
+    } catch (error) {
+      console.error('Error submitting experiment:', error); // Log API error
+      setAlertMessage('Failed to submit experiment. Please try again.');
+      setAlertSeverity('error');
+      setOpenSnackbar(true);
     }
   };
 
-  const removeMaterial = (index) => {
-    const updatedMaterials = [...materials];
-    updatedMaterials.splice(index, 1);
-    setMaterials(updatedMaterials);
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const formData = {
-      title,
-      requestDate,
-      experimentDate,
-      teacher,
-      objective,
-      materials,
-      groupCount,
-      notes,
-      safetyMeasures,
-    };
-    console.log(formData);
-  };
-
+  // Determine what content to show for the current step
   const getStepContent = (step) => {
     switch (step) {
       case 0:
-        return (
-          <Box>
-            <TextField
-              label="Experiment Title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              fullWidth
-              required
-              margin="normal"
-            />
-            <TextField
-              label="Request Date"
-              type="date"
-              value={requestDate}
-              onChange={(e) => setRequestDate(e.target.value)}
-              fullWidth
-              required
-              margin="normal"
-              InputLabelProps={{ shrink: true }}
-            />
-            <TextField
-              label="Experiment Date"
-              type="date"
-              value={experimentDate}
-              onChange={(e) => setExperimentDate(e.target.value)}
-              fullWidth
-              required
-              margin="normal"
-              InputLabelProps={{ shrink: true }}
-            />
-            <TextField
-              select
-              label="Select Teacher"
-              value={teacher}
-              onChange={(e) => setTeacher(e.target.value)}
-              fullWidth
-              required
-              margin="normal"
-            >
-              {teachers.map((teacher, index) => (
-                <MenuItem key={index} value={teacher}>
-                  {teacher}
-                </MenuItem>
-              ))}
-            </TextField>
-          </Box>
-        );
+        return <Step1 formData={formData} handleChange={handleChange} errorFields={errorFields} translations={translations} language={language} teachers={teachers} />;
       case 1:
-        return (
-          <Box>
-            <TextField
-              label="Objective of Experiment"
-              value={objective}
-              onChange={(e) => setObjective(e.target.value)}
-              multiline
-              rows={4}
-              fullWidth
-              required
-              margin="normal"
-            />
-            <Typography variant="h6" gutterBottom>Add Materials</Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={6}>
-                <TextField
-                  label="Material Name"
-                  value={materialName}
-                  onChange={(e) => setMaterialName(e.target.value)}
-                  fullWidth
-                  margin="normal"
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  label="Quantity"
-                  value={materialQuantity}
-                  onChange={(e) => setMaterialQuantity(e.target.value)}
-                  fullWidth
-                  margin="normal"
-                />
-              </Grid>
-            </Grid>
-            <Button variant="contained" color="primary" onClick={addMaterial} sx={{ marginBottom: '16px' }}>
-              Add Material
-            </Button>
-            <List>
-              {materials.map((material, index) => (
-                <ListItem key={index}>
-                  <ListItemText primary={`${material.name} - Quantity: ${material.quantity}`} />
-                  <ListItemSecondaryAction>
-                    <IconButton edge="end" aria-label="delete" onClick={() => removeMaterial(index)}>
-                      <DeleteIcon />
-                    </IconButton>
-                  </ListItemSecondaryAction>
-                </ListItem>
-              ))}
-            </List>
-          </Box>
-        );
+        return <Step2 formData={formData} handleChange={handleChange} errorFields={errorFields} translations={translations} language={language} />;
       case 2:
-        return (
-          <Box>
-            <TextField
-              label="Number of Groups"
-              type="number"
-              value={groupCount}
-              onChange={(e) => setGroupCount(e.target.value)}
-              fullWidth
-              required
-              margin="normal"
-            />
-            <TextField
-              label="Notes for Lab Technician"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              multiline
-              rows={3}
-              fullWidth
-              margin="normal"
-            />
-            <Typography variant="h6" gutterBottom>Safety Measures</Typography>
-            <FormControlLabel
-              control={<Checkbox checked={safetyMeasures.gloves} onChange={(e) => setSafetyMeasures({ ...safetyMeasures, gloves: e.target.checked })} />}
-              label="Gloves"
-            />
-            <FormControlLabel
-              control={<Checkbox checked={safetyMeasures.mask} onChange={(e) => setSafetyMeasures({ ...safetyMeasures, mask: e.target.checked })} />}
-              label="Mask"
-            />
-            <FormControlLabel
-              control={<Checkbox checked={safetyMeasures.labCoat} onChange={(e) => setSafetyMeasures({ ...safetyMeasures, labCoat: e.target.checked })} />}
-              label="Lab Coat"
-            />
-          </Box>
-        );
+        return <Step3 formData={formData} handleChange={handleChange} errorFields={errorFields} translations={translations} language={language} />;
       default:
         return 'Unknown step';
     }
   };
 
+  const handleSnackbarClose = () => setOpenSnackbar(false);
+
   return (
     <Box sx={{ maxWidth: 800, margin: 'auto', padding: '20px' }}>
-      <Typography variant="h4" gutterBottom>Submit Experiment Request</Typography>
       <Stepper activeStep={activeStep} alternativeLabel>
         {steps.map((label) => (
           <Step key={label}>
@@ -208,24 +164,36 @@ const SubmitExperimentForm = () => {
         ))}
       </Stepper>
 
-      <form onSubmit={handleSubmit}>
-        {getStepContent(activeStep)}
+      <Box sx={{ minHeight: '400px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+        {getStepContent(activeStep)} {/* Render current step's content */}
 
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px' }}>
-          <Button disabled={activeStep === 0} onClick={handleBack}>
-            Back
-          </Button>
-          {activeStep === steps.length - 1 ? (
-            <Button type="submit" variant="contained" color="primary">
-              Submit
-            </Button>
-          ) : (
-            <Button variant="contained" color="primary" onClick={handleNext}>
-              Next
-            </Button>
-          )}
-        </Box>
-      </form>
+        {/* Explicitly handle Next and Submit separately */}
+        {activeStep === steps.length - 1 ? (
+          <StepButtons
+            activeStep={activeStep}
+            handleBack={handleBack}
+            handleNext={handleSubmit} // On the last step, call handleSubmit
+            stepsLength={steps.length}
+            language={language}
+            translations={translations}
+          />
+        ) : (
+          <StepButtons
+            activeStep={activeStep}
+            handleBack={handleBack}
+            handleNext={handleNext} // For other steps, just move to the next step
+            stepsLength={steps.length}
+            language={language}
+            translations={translations}
+          />
+        )}
+      </Box>
+
+      <Snackbar open={openSnackbar} autoHideDuration={6000} onClose={handleSnackbarClose}>
+        <Alert onClose={handleSnackbarClose} severity={alertSeverity}>
+          {alertMessage}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

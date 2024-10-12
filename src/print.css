@@ -1,0 +1,8 @@
+/* src/print.css */
+
+@media print {
+    .no-print {
+      display: none !important; /* Hides elements with this class when printing */
+    }
+  }
+  
